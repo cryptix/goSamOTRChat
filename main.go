@@ -33,9 +33,7 @@ func main() {
 		cli.BoolFlag{Name: "debug", Usage: "output debug information from sam client"},
 		cli.StringFlag{Name: "key,k", Value: "keyfile", Usage: "The private keyfile to use."},
 	}
-
 	app.Before = before
-
 	app.Commands = []cli.Command{
 		{
 			Name:   "server",
@@ -62,17 +60,16 @@ func before(ctx *cli.Context) (err error) {
 	if keyFile == "" {
 		logging.CheckFatal(errors.New("flag key can't be empty"))
 	}
-	sam, err = goSam.NewDefaultClient()
-	logging.CheckFatal(err)
-
 	if ctx.Bool("debug") {
-		sam.ToggleVerbose()
+		goSam.ConnDebug = true
 	}
-	l.Notice("SAM Client Created")
+	sam, err = goSam.NewDefaultClient()
+	check(err)
+
+	l.Info("SAM Client Created")
 	var keyBytes []byte
 	keyBytes, err = ioutil.ReadFile(keyFile)
-	logging.CheckFatal(err)
-
+	check(err)
 	rest, ok := otrPrivKey.Parse(keyBytes)
 	if !ok {
 		logging.CheckFatal(fmt.Errorf("ERROR: Failed to parse private key %s\n", keyFile))
@@ -80,7 +77,6 @@ func before(ctx *cli.Context) (err error) {
 	if len(rest) > 0 {
 		logging.CheckFatal(errors.New("ERROR: data remaining after parsing private key"))
 	}
-
 	otrConv.PrivateKey = &otrPrivKey
 	otrConv.FragmentSize = 5000
 	return nil
@@ -92,8 +88,8 @@ func cmdGenKey(ctx *cli.Context) {
 	newKey.Generate(rand.Reader)
 	keyBytes := newKey.Serialize(nil)
 	err := ioutil.WriteFile(keyFile, keyBytes, 0700)
-	logging.CheckFatal(err)
-	l.Noticef("Done! Fingerprint: %v", newKey.Fingerprint())
+	check(err)
+	l.Infof("Done! Fingerprint: %v", newKey.Fingerprint())
 }
 
 func cmdClient(ctx *cli.Context) {
@@ -102,33 +98,32 @@ func cmdClient(ctx *cli.Context) {
 		logging.CheckFatal(errors.New("flag dest can't be empty"))
 	}
 	id, _, err := sam.CreateStreamSession("")
-	logging.CheckFatal(err)
-
+	check(err)
 	newC, err := goSam.NewDefaultClient()
-	logging.CheckFatal(err)
-
+	check(err)
 	err = newC.StreamConnect(id, dest)
-	logging.CheckFatal(err)
-
-	l.Notice("Stream connected. Sending OTR Query")
+	check(err)
+	l.Info("Stream connected. Sending OTR Query")
 	fmt.Fprintf(newC.SamConn, "%s.", otr.QueryMessage)
-
 	bufStdin := bufio.NewReader(os.Stdin)
-
 	samReader := bufio.NewReader(newC.SamConn)
 	msgLoop(newC.SamConn, samReader, bufStdin)
 }
 
 func cmdServer(ctx *cli.Context) {
 	conn, err := sam.Accept()
-	logging.CheckFatal(err)
+	check(err)
 	samReader := bufio.NewReader(conn)
-
 	// first line is from sam, incomming address
 	line, err := samReader.ReadString('\n')
-	logging.CheckFatal(err)
-	l.Notice("Conenction From: ", line)
-
+	check(err)
+	l.Info("Conenction From: ", line)
 	bufStdin := bufio.NewReader(os.Stdin)
 	msgLoop(conn, samReader, bufStdin)
+}
+
+func check(err error) {
+	if err != nil {
+		l.Fatal(err)
+	}
 }
