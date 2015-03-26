@@ -2,37 +2,37 @@ package main
 
 import (
 	"bufio"
-	"log"
 	"net"
 
-	"code.google.com/p/go.crypto/otr"
+	"github.com/cryptix/go/logging"
+	"golang.org/x/crypto/otr"
 )
 
 func msgLoop(samConn net.Conn, samReader, stdinReader *bufio.Reader) {
 	for {
 		fromPeer, err := samReader.ReadBytes('.')
-		checkErr(err)
-		// log.Printf("<RAW> Msg From Peer: %s\n", string(fromPeer))
+		logging.CheckFatal(err)
+		// l.Warningf("<RAW> Msg From Peer: %s\n", string(fromPeer))
 
 		out, encrypted, otrSecChange, msgToPeer, err := otrConv.Receive(fromPeer)
-		checkErr(err)
+		logging.CheckFatal(err)
 
 		if len(out) > 0 {
-			log.Print("<OTR>", string(out))
+			l.Noticef("<OTR>\n%s", string(out))
 		}
 
 		if !encrypted {
-			log.Println("<OTR> Conversation not yet encrypted!!!")
+			l.Critical("<OTR> Conversation not yet encrypted!!!")
 		}
 
 		if len(msgToPeer) > 0 {
-			log.Printf("<OTR> Transmitting %d messages.\n", len(msgToPeer))
+			l.Warningf("<OTR> Transmitting %d messages.\n", len(msgToPeer))
 			for _, msg := range msgToPeer {
 				n, err := samConn.Write(msg)
-				checkErr(err)
+				logging.CheckFatal(err)
 
 				if n < len(msg) {
-					log.Fatalln("<OTR> some bytes were not send to peer..")
+					l.Fatal("<OTR> some bytes were not send to peer..")
 				}
 			}
 		}
@@ -44,35 +44,38 @@ func msgLoop(samConn net.Conn, samReader, stdinReader *bufio.Reader) {
 			}
 
 		case otr.NewKeys:
-			log.Printf("<OTR> Key exchange completed. SSID:%x\n", otrConv.SSID)
+			l.Warningf("<OTR> Key exchange completed.\nFingerprint:%x\nSSID:%x\n",
+				otrConv.TheirPublicKey.Fingerprint(),
+				otrConv.SSID,
+			)
 			sendStdinMsg(samConn, stdinReader)
 
 		case otr.ConversationEnded:
-			log.Println("<OTR> Conversation ended.")
+			l.Critical("<OTR> Conversation ended.")
 			return
 
 		default:
-			log.Printf("<OTR> SMPState: %d - not yet implemented!... :(", otrSecChange)
+			l.Warningf("<OTR> SMPState: %d - not yet implemented!... :(", otrSecChange)
 		}
 	}
 }
 
 func sendStdinMsg(samConn net.Conn, stdinReader *bufio.Reader) {
 	// read keyboard input
-	log.Println("<OTR> Reading stdin")
+	l.Notice("<OTR> Reading stdin")
 	chatInput, err := stdinReader.ReadBytes('\n')
-	checkErr(err)
+	logging.CheckFatal(err)
 
 	// prepare message to peer
 	msgToPeer, err := otrConv.Send(chatInput)
-	checkErr(err)
+	logging.CheckFatal(err)
 
 	for _, msg := range msgToPeer {
 		n, err := samConn.Write(msg)
-		checkErr(err)
+		logging.CheckFatal(err)
 
 		if n < len(msg) {
-			log.Fatalln("<OTR> some bytes were not send to peer..")
+			l.Fatal("<OTR> some bytes were not send to peer..")
 		}
 	}
 }
