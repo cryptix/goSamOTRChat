@@ -33,15 +33,16 @@ func main() {
 		cli.BoolFlag{Name: "debug", Usage: "output debug information from sam client"},
 		cli.StringFlag{Name: "key,k", Value: "keyfile", Usage: "The private keyfile to use."},
 	}
-	app.Before = before
 	app.Commands = []cli.Command{
 		{
 			Name:   "server",
 			Action: cmdServer,
+			Before: parseKey,
 		},
 		{
 			Name:   "client",
 			Action: cmdClient,
+			Before: parseKey,
 			Flags: []cli.Flag{
 				cli.StringFlag{Name: "dest,d", Usage: "the i2p destination address to connect to"},
 			},
@@ -55,12 +56,12 @@ func main() {
 	app.Run(os.Args)
 }
 
-func before(ctx *cli.Context) (err error) {
-	keyFile = ctx.String("key")
+func parseKey(ctx *cli.Context) (err error) {
+	keyFile = ctx.GlobalString("key")
 	if keyFile == "" {
 		logging.CheckFatal(errors.New("flag key can't be empty"))
 	}
-	if ctx.Bool("debug") {
+	if ctx.GlobalBool("debug") {
 		goSam.ConnDebug = true
 	}
 	sam, err = goSam.NewDefaultClient()
@@ -89,7 +90,7 @@ func cmdGenKey(ctx *cli.Context) {
 	keyBytes := newKey.Serialize(nil)
 	err := ioutil.WriteFile(keyFile, keyBytes, 0700)
 	check(err)
-	l.Infof("Done! Fingerprint: %v", newKey.Fingerprint())
+	l.Infof("Done! Fingerprint: %x", newKey.Fingerprint())
 }
 
 func cmdClient(ctx *cli.Context) {
